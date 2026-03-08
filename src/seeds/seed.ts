@@ -68,11 +68,11 @@ async function seed() {
 
     await q.query(
       `
-      INSERT INTO users (email, password, role, employer_id, is_active)
+      INSERT INTO users (email, password, role, employer_id, status)
       VALUES
-        ('admin@rssb.rw',            $1, 'admin',    NULL,    true),
-        ('employer@kigalitea.rw',    $2, 'employer', $4,      true),
-        ('employer@rwconstruct.rw',  $3, 'employer', $5,      true)
+        ('admin@rssb.rw',            $1, 'admin',    NULL,    'active'),
+        ('employer@kigalitea.rw',    $2, 'employer', $4,      'active'),
+        ('employer@rwconstruct.rw',  $3, 'employer', $5,      'active')
     `,
       [adminHash, employer1Hash, employer2Hash, emp1Id, emp2Id],
     );
