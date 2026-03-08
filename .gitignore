@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# build
+/dist
+/build
+
+# environment
+.env
+.env.local
+.env.production
+
+# testing
+/coverage
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+
+# docker volumes
+postgres_data/
