@@ -12,6 +12,12 @@ import {
 import { Employer } from '../../employers/entities/employer.entity';
 import { ContributionLine } from '../../declarations/entities/contribution-line.entity';
 
+export enum EmployeeStatus {
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  DELETED = 'deleted',
+}
+
 @Entity('employees')
 export class Employee {
   @PrimaryGeneratedColumn('uuid')
@@ -44,8 +50,15 @@ export class Employee {
   @Column({ nullable: true })
   phone: string;
 
-  @Column({ default: true, name: 'is_active' })
-  isActive: boolean;
+  @Column({
+    type: 'enum',
+    enum: EmployeeStatus,
+    default: EmployeeStatus.ACTIVE,
+  })
+  status: EmployeeStatus;
+
+  @Column({ name: 'deleted_at', nullable: true, type: 'timestamptz' })
+  deletedAt: Date;
 
   @Column({ name: 'employer_id' })
   employerId: string;

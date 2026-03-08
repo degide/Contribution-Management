@@ -13,6 +13,12 @@ export enum UserRole {
   EMPLOYER = 'employer',
 }
 
+export enum UserStatus {
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  DELETED = 'deleted',
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -33,8 +39,15 @@ export class User {
   @Column({ name: 'employer_id', nullable: true })
   employerId: string;
 
-  @Column({ default: true, name: 'is_active' })
-  isActive: boolean;
+ @Column({
+    type: 'enum',
+    enum: UserStatus,
+    default: UserStatus.ACTIVE,
+  })
+  status: UserStatus;
+
+  @Column({ name: 'deleted_at', nullable: true, type: 'timestamptz' })
+  deletedAt: Date;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -13,6 +13,7 @@ import { Declaration } from '../../declarations/entities/declaration.entity';
 export enum EmployerStatus {
   ACTIVE = 'active',
   SUSPENDED = 'suspended',
+  DELETED = 'deleted',
 }
 
 export enum EmployerSector {
@@ -58,6 +59,9 @@ export class Employer {
 
   @Column({ nullable: true })
   address: string;
+
+  @Column({ name: 'deleted_at', nullable: true, type: 'timestamptz' })
+  deletedAt: Date;
 
   @OneToMany(() => Employee, (employee) => employee.employer)
   employees: Employee[];
