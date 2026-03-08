@@ -81,7 +81,7 @@ All endpoints are prefixed with `/api/[version]`. JWT Bearer token required on a
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/auth/login` | Login -> returns JWT |
-| POST | `/auth/register` | Create user account |
+| POST | `/auth/register-admin` | Create admin account |
 
 ### Employers
 | Method | Path | Auth | Description |
