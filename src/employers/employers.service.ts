@@ -3,10 +3,11 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOptionsWhere, ILike, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, ILike, Not, Repository } from 'typeorm';
 import { Employer, EmployerStatus } from './entities/employer.entity';
 import {
   CreateEmployerDto,
@@ -15,7 +16,8 @@ import {
   CreateEmployerResponseDto,
 } from './dto/employer.dto';
 import { paginate, PaginatedResponse } from '../common/dto/pagination.dto';
-import { User, UserRole } from '../users/entities/user.entity';
+import { User, UserRole, UserStatus } from '../users/entities/user.entity';
+import { EmployeeStatus } from '@/employees/entities/employee.entity';
 
 @Injectable()
 export class EmployersService {
@@ -37,13 +39,13 @@ export class EmployersService {
    */
   async create(dto: CreateEmployerDto): Promise<CreateEmployerResponseDto> {
     // Pre-flight uniqueness checks before opening the transaction
-    const tinConflict = await this.employerRepo.findOne({ where: { tin: dto.tin } });
-    if (tinConflict) {
+    const existingEmployerByTin = await this.employerRepo.findOne({ where: { tin: dto.tin } });
+    if (existingEmployerByTin) {
       throw new ConflictException(`Employer with TIN ${dto.tin} already exists`);
     }
 
-    const emailConflict = await this.userRepo.findOne({ where: { email: dto.accountEmail } });
-    if (emailConflict) {
+    const existingUserByEmail = await this.userRepo.findOne({ where: { email: dto.accountEmail } });
+    if (existingUserByEmail) {
       throw new ConflictException(`Email ${dto.accountEmail} is already registered`);
     }
 
@@ -57,6 +59,7 @@ export class EmployersService {
         sector: dto.sector,
         phone: dto.phone,
         address: dto.address,
+        status: EmployerStatus.ACTIVE,
       });
       const savedEmployer = await manager.save(Employer, employer);
 
@@ -66,6 +69,7 @@ export class EmployersService {
         password: hashedPassword,
         role: UserRole.EMPLOYER,
         employerId: savedEmployer.id,
+        status: UserStatus.ACTIVE,
       });
       const savedUser = await manager.save(User, user);
 
@@ -97,7 +101,10 @@ export class EmployersService {
       return paginate([employer], 1, limit, offset);
     }
 
-    const where: FindOptionsWhere<Employer> = {};
+    const where: FindOptionsWhere<Employer> = {
+      // Exclude soft-deleted records from all list responses
+      status: Not(EmployerStatus.DELETED),
+    };
     if (status) where.status = status;
     if (search) where.name = ILike(`%${search}%`);
 
@@ -117,7 +124,11 @@ export class EmployersService {
     }
 
     const employer = await this.employerRepo.findOne({
-      where: { id },
+      where: { 
+        id,
+        // Employer users should not see deleted records even if they know the ID
+        ...(currentUser.role === UserRole.EMPLOYER ? { status: Not(EmployerStatus.DELETED) } : {}),
+      },
       relations: ['employees'],
     });
 
@@ -135,6 +146,11 @@ export class EmployersService {
       throw new ForbiddenException('Only admins can change employer status');
     }
 
+    // Prevent manually setting status to DELETED through the update endpoint
+    if ((dto as any).status === EmployerStatus.DELETED) {
+      throw new BadRequestException('Cannot set status to deleted.');
+    }
+
     if (dto.tin && dto.tin !== employer.tin) {
       const conflict = await this.employerRepo.findOne({ where: { tin: dto.tin } });
       if (conflict) {
@@ -146,21 +162,49 @@ export class EmployersService {
     return this.employerRepo.save(employer);
   }
 
+  /**
+   * Soft-deletes an employer by setting its status to DELETED and recording the deletion timestamp.
+   * Also soft-deletes the linked user account and all active employees of this employer to maintain data integrity.
+   * All operations are performed within a transaction to ensure atomicity.
+   *
+   * @param id - The ID of the employer to delete
+   * @throws NotFoundException if the employer does not exist or is already deleted
+   */
   async remove(id: string): Promise<void> {
     const employer = await this.employerRepo.findOne({ where: { id } });
-    if (!employer) {
+    if (!employer || employer.status === EmployerStatus.DELETED) {
       throw new NotFoundException(`Employer with id ${id} not found`);
     }
-    // Also remove the linked user account so the credentials stop working
+
+    const now = new Date();
+
     await this.dataSource.transaction(async (manager) => {
-      await manager.delete(User, { employerId: id });
-      await manager.remove(Employer, employer);
+      // 1. Soft-delete the employer
+      await manager.update(Employer, id, {
+        status: EmployerStatus.DELETED,
+        deletedAt: now,
+      });
+
+      // 2. Soft-delete the linked user account so their JWT stops working
+      //    on next validation (JwtStrategy checks status === ACTIVE)
+      await manager.update(
+        User,
+        { employerId: id, status: UserStatus.ACTIVE },
+        { status: UserStatus.DELETED, deletedAt: now },
+      );
+
+      // 3. Soft-delete all active employees of this employer
+      await manager.update(
+        'employees',
+        { employer_id: id, status: EmployeeStatus.ACTIVE },
+        { status: EmployeeStatus.DELETED, deleted_at: now },
+      );
     });
   }
 
   async suspend(id: string): Promise<Employer> {
     const employer = await this.employerRepo.findOne({ where: { id } });
-    if (!employer) {
+    if (!employer || employer.status === EmployerStatus.DELETED) {
       throw new NotFoundException(`Employer with id ${id} not found`);
     }
     employer.status = EmployerStatus.SUSPENDED;

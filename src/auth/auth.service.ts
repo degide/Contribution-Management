@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole } from '../users/entities/user.entity';
+import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { LoginDto, AuthResponseDto, RegisterAdminDto } from './dto/auth.dto';
 
 @Injectable()
@@ -36,8 +36,10 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
+    
+    // Deliberately vague: don't reveal whether the account exists or is deleted
+    if (!user || user.status === UserStatus.DELETED) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);

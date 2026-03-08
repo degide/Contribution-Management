@@ -6,8 +6,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Employee } from './entities/employee.entity';
+import { Not, Repository } from 'typeorm';
+import { Employee, EmployeeStatus } from './entities/employee.entity';
 import { Employer, EmployerStatus } from '../employers/entities/employer.entity';
 import { CreateEmployeeDto, UpdateEmployeeDto, EmployeeQueryDto } from './dto/employee.dto';
 import { paginate, PaginatedResponse } from '../common/dto/pagination.dto';
@@ -25,7 +25,7 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto, currentUser: User): Promise<Employee> {
     // Validate employer exists and is active
     const employer = await this.employerRepo.findOne({ where: { id: dto.employerId } });
-    if (!employer) {
+    if (!employer || employer.status === EmployerStatus.DELETED) {
       throw new NotFoundException(`Employer ${dto.employerId} not found`);
     }
     if (employer.status === EmployerStatus.SUSPENDED) {
@@ -37,12 +37,12 @@ export class EmployeesService {
       throw new ForbiddenException('You can only register employees for your own company');
     }
 
-    const existing = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId } });
+    const existing = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId, employerId: dto.employerId } });
     if (existing) {
-      throw new ConflictException(`Employee with National ID ${dto.nationalId} already exists`);
+      throw new ConflictException(`Employee with National ID ${dto.nationalId} already exists for this employer`);
     }
 
-    const employee = this.employeeRepo.create(dto);
+    const employee = this.employeeRepo.create({ ...dto, status: EmployeeStatus.ACTIVE });
     return this.employeeRepo.save(employee);
   }
 
@@ -52,6 +52,8 @@ export class EmployeesService {
     const qb = this.employeeRepo
       .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.employer', 'employer')
+      // Never surface soft-deleted employees in list responses
+      .where('employee.status != :deleted', { deleted: EmployeeStatus.DELETED })
       .orderBy('employee.createdAt', 'DESC');
 
     // Employer users can only see their own employees
@@ -76,7 +78,7 @@ export class EmployeesService {
 
   async findOne(id: string, currentUser: User): Promise<Employee> {
     const employee = await this.employeeRepo.findOne({
-      where: { id },
+      where: { id, status: Not(EmployeeStatus.DELETED) },
       relations: ['employer'],
     });
 
@@ -86,7 +88,7 @@ export class EmployeesService {
 
     // Employer users can only see employees from their company
     if (currentUser.role === UserRole.EMPLOYER && employee.employerId !== currentUser.employerId) {
-      throw new ForbiddenException('Access denied');
+      throw new ForbiddenException('You can only access employees from your own company');
     }
 
     return employee;
@@ -96,9 +98,9 @@ export class EmployeesService {
     const employee = await this.findOne(id, currentUser);
 
     if (dto.nationalId && dto.nationalId !== employee.nationalId) {
-      const conflict = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId } });
+      const conflict = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId, employerId: employee.employerId } });
       if (conflict) {
-        throw new ConflictException(`National ID ${dto.nationalId} is already in use`);
+        throw new ConflictException(`Employee with National ID ${dto.nationalId} is already in use for this employer`);
       }
     }
 
@@ -106,14 +108,23 @@ export class EmployeesService {
     return this.employeeRepo.save(employee);
   }
 
+  /**
+   * Soft-deletes an employee by setting its status to DELETED and recording the deletion timestamp.
+   * 
+   *  @param id - The ID of the employee to delete
+   *  @param currentUser - The user performing the deletion, used for access control
+   *  @throws NotFoundException if the employee does not exist or is already deleted
+   */
   async remove(id: string, currentUser: User): Promise<void> {
     const employee = await this.findOne(id, currentUser);
-    await this.employeeRepo.remove(employee);
+    employee.status = EmployeeStatus.DELETED;
+    employee.deletedAt = new Date();
+    await this.employeeRepo.save(employee);
   }
 
   async findByEmployer(employerId: string): Promise<Employee[]> {
     return this.employeeRepo.find({
-      where: { employerId, isActive: true },
+      where: { employerId, status: EmployeeStatus.ACTIVE },
       order: { lastName: 'ASC' },
     });
   }
