@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../users/entities/user.entity';
-import { Employer } from '../employers/entities/employer.entity';
 
 @Module({
   imports: [
@@ -19,7 +18,7 @@ import { Employer } from '../employers/entities/employer.entity';
         },
       }),
     }),
-    TypeOrmModule.forFeature([User, Employer]),
+    TypeOrmModule.forFeature([User]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

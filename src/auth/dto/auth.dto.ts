@@ -1,13 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEmail,
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MinLength,
-} from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { UserRole } from '../../users/entities/user.entity';
 
 export class LoginDto {
@@ -21,25 +13,15 @@ export class LoginDto {
   password: string;
 }
 
-export class RegisterDto {
-  @ApiProperty({ example: 'employer@company.rw' })
+export class RegisterAdminDto {
+  @ApiProperty({ example: 'newadmin@rssb.rw' })
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'SecurePass123!' })
+  @ApiProperty({ example: 'SecurePass123!', minLength: 8 })
   @IsString()
   @MinLength(8)
   password: string;
-
-  @ApiProperty({ enum: UserRole, default: UserRole.EMPLOYER })
-  @IsEnum(UserRole)
-  role: UserRole;
-
-  // Required when role = employer; links user to employer record
-  @ApiProperty({ required: false, description: 'Employer ID (required if role is employer)' })
-  @IsOptional()
-  @IsUUID()
-  employerId?: string;
 }
 
 export class AuthResponseDto {
