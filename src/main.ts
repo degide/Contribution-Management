@@ -43,7 +43,7 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: process.env.CORS_ORIGIN ?? '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Accept, Authorization',
   });
@@ -51,7 +51,8 @@ async function bootstrap() {
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('Employer Contribution Management API')
-    .setDescription(`
+    .setDescription(
+      `
   Manages employer registration, employee declaration, and monthly contribution submissions.
 
   ### Authentication
@@ -73,7 +74,8 @@ async function bootstrap() {
   - Admin: \`admin@rssb.rw\` / \`Admin1234!\`
   
   - Employer: \`employer@kigalitea.rw\` / \`Employer1234!\`
-  `)
+  `,
+    )
     .setVersion('1.0.0')
     .addBearerAuth()
     .addTag('Auth', 'Authentication endpoints')
@@ -91,7 +93,7 @@ async function bootstrap() {
     },
   });
 
-  const port = parseInt(process.env.PORT || '3000', 10);
+  const port = parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);
 
   logger.log(`Contribution API running at: http://localhost:${port}/api`);

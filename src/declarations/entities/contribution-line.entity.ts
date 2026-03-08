@@ -10,11 +10,11 @@ import {
 import { Declaration } from './declaration.entity';
 import { Employee } from '../../employees/entities/employee.entity';
 
-// Contribution rates (as defined in the assessment requirements)
+// Contribution rates
 export const CONTRIBUTION_RATES = {
-  PENSION: 0.06,      // 6%
-  MEDICAL: 0.075,     // 7.5%
-  MATERNITY: 0.003,   // 0.3%
+  PENSION: 0.06, // 6%
+  MEDICAL: 0.075, // 7.5%
+  MATERNITY: 0.003, // 0.3%
 };
 
 @Entity('contribution_lines')

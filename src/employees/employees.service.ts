@@ -49,7 +49,8 @@ export class EmployeesService {
   async findAll(query: EmployeeQueryDto, currentUser: User): Promise<PaginatedResponse<Employee>> {
     const { limit = 10, offset = 0, search, employerId } = query;
 
-    const qb = this.employeeRepo.createQueryBuilder('employee')
+    const qb = this.employeeRepo
+      .createQueryBuilder('employee')
       .leftJoinAndSelect('employee.employer', 'employer')
       .orderBy('employee.createdAt', 'DESC');
 

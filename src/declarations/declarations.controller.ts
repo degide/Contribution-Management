@@ -9,12 +9,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { DeclarationsService } from './declarations.service';
 import {
   CreateDeclarationDto,
@@ -84,10 +79,7 @@ export class DeclarationsController {
   @Patch(':id/reject')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: '[Admin] Reject a SUBMITTED declaration with reason' })
-  reject(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: RejectDeclarationDto,
-  ) {
+  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RejectDeclarationDto) {
     return this.declarationsService.reject(id, dto);
   }
 }

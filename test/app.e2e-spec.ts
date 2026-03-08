@@ -1,5 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
@@ -14,7 +14,7 @@ dotenv.config();
 
 const RUN_ID = Date.now().toString().slice(-6); // 6 digits
 const TEST_NATIONAL_ID = `19999${RUN_ID}7099`.padEnd(16, '0').slice(0, 16); // 16 digits
-const TEST_PERIOD = `2${RUN_ID.slice(0, 3)}-${(parseInt(RUN_ID.slice(3, 5)) % 12 + 1).toString().padStart(2, '0')}`; // format YYYY-MM
+const TEST_PERIOD = `2${RUN_ID.slice(0, 3)}-${((parseInt(RUN_ID.slice(3, 5)) % 12) + 1).toString().padStart(2, '0')}`; // format YYYY-MM
 
 /**
  * E2E tests for critical flows:
@@ -56,20 +56,13 @@ describe('Contribution Management API (e2e)', () => {
     // Cleanup rows created during this run
     // Order matters: contribution_lines -> declarations -> employees (FK constraints)
     if (createdDeclarationId) {
-      await dataSource.query(
-        `DELETE FROM contribution_lines WHERE declaration_id = $1`,
-        [createdDeclarationId],
-      );
-      await dataSource.query(
-        `DELETE FROM declarations WHERE id = $1`,
-        [createdDeclarationId],
-      );
+      await dataSource.query(`DELETE FROM contribution_lines WHERE declaration_id = $1`, [
+        createdDeclarationId,
+      ]);
+      await dataSource.query(`DELETE FROM declarations WHERE id = $1`, [createdDeclarationId]);
     }
     if (createdEmployeeId) {
-      await dataSource.query(
-        `DELETE FROM employees WHERE id = $1`,
-        [createdEmployeeId],
-      );
+      await dataSource.query(`DELETE FROM employees WHERE id = $1`, [createdEmployeeId]);
     }
 
     await app.close();
@@ -246,10 +239,10 @@ describe('Contribution Management API (e2e)', () => {
       expect(res.body.paymentNumber).toMatch(/^PAY-/);
 
       const line = res.body.contributionLines[0];
-      expect(parseFloat(line.pensionAmount)).toBeCloseTo(30000, 2);   // 6%
-      expect(parseFloat(line.medicalAmount)).toBeCloseTo(37500, 2);   // 7.5%
-      expect(parseFloat(line.maternityAmount)).toBeCloseTo(1500, 2);  // 0.3%
-      expect(parseFloat(line.total)).toBeCloseTo(69000, 2);           // 13.8%
+      expect(parseFloat(line.pensionAmount)).toBeCloseTo(30000, 2); // 6%
+      expect(parseFloat(line.medicalAmount)).toBeCloseTo(37500, 2); // 7.5%
+      expect(parseFloat(line.maternityAmount)).toBeCloseTo(1500, 2); // 0.3%
+      expect(parseFloat(line.total)).toBeCloseTo(69000, 2); // 13.8%
     });
 
     it('duplicate period for the same employer returns 409', async () => {

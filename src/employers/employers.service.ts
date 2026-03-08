@@ -28,10 +28,7 @@ export class EmployersService {
     return this.employerRepo.save(employer);
   }
 
-  async findAll(
-    query: EmployerQueryDto,
-    currentUser: User,
-  ): Promise<PaginatedResponse<Employer>> {
+  async findAll(query: EmployerQueryDto, currentUser: User): Promise<PaginatedResponse<Employer>> {
     const { limit = 10, offset = 0, status, search } = query;
 
     // Employer users can only see their own record

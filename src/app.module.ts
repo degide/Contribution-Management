@@ -14,17 +14,17 @@ import { DeclarationsModule } from './declarations/declarations.module';
     TypeOrmModule.forRootAsync({
       useFactory: () => ({
         type: 'postgres',
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432', 10),
-        username: process.env.DB_USERNAME || '',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || '',
+        host: process.env.DB_HOST ?? 'localhost',
+        port: parseInt(process.env.DB_PORT ?? '5432', 10),
+        username: process.env.DB_USERNAME ?? '',
+        password: process.env.DB_PASSWORD ?? '',
+        database: process.env.DB_NAME ?? '',
         autoLoadEntities: true,
         // Use auto migrations in production, sync in dev only
         synchronize: process.env.NODE_ENV === 'development',
         logging: process.env.NODE_ENV === 'development',
         // Connection pool settings
-        poolSize: parseInt(process.env.DB_POOL_SIZE || '10', 10),
+        poolSize: parseInt(process.env.DB_POOL_SIZE ?? '10', 10),
         poolErrorHandler: (err) => {
           console.error('Database connection error:', err);
         },
@@ -36,8 +36,8 @@ import { DeclarationsModule } from './declarations/declarations.module';
       useFactory: () => ({
         throttlers: [
           {
-            ttl: parseInt(process.env.THROTTLE_TTL || '60000', 10),
-            limit: parseInt(process.env.THROTTLE_LIMIT || '60', 10),
+            ttl: parseInt(process.env.THROTTLE_TTL ?? '60000', 10),
+            limit: parseInt(process.env.THROTTLE_LIMIT ?? '60', 10),
           },
         ],
       }),
@@ -56,4 +56,4 @@ import { DeclarationsModule } from './declarations/declarations.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

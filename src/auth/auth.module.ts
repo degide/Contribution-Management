@@ -13,9 +13,9 @@ import { Employer } from '../employers/entities/employer.entity';
     PassportModule,
     JwtModule.registerAsync({
       useFactory: () => ({
-        secret: process.env.JWT_SECRET || 'fallback-secret',
+        secret: process.env.JWT_SECRET ?? 'fallback-secret',
         signOptions: {
-          expiresIn: (process.env.JWT_EXPIRES_IN as any) || '7h',
+          expiresIn: (process.env.JWT_EXPIRES_IN ?? '7h') as `${number}${'s' | 'm' | 'h' | 'd'}`,
         },
       }),
     }),
@@ -25,4 +25,4 @@ import { Employer } from '../employers/entities/employer.entity';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, JwtModule],
 })
-export class AuthModule { }
+export class AuthModule {}

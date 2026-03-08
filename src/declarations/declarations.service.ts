@@ -36,7 +36,15 @@ export class DeclarationsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // ── CREATE DRAFT ────────────────────────────────────────────────────────────
+  /**
+   * Creates a new declaration with associated contribution lines.
+   * Validations:
+   *   - Employer must exist and be active
+   *   - No existing declaration for same employer + period
+   *   - Each line's employee must exist and belong to the employer
+   * Transactionally creates declaration and lines, then calculates totals.
+   * Initial status is DRAFT.
+   */
   async create(dto: CreateDeclarationDto, currentUser: User): Promise<Declaration> {
     // Authorization: employer can only create for themselves
     if (currentUser.role === UserRole.EMPLOYER && currentUser.employerId !== dto.employerId) {
@@ -96,7 +104,13 @@ export class DeclarationsService {
     return newDeclaration;
   }
 
-  // ── UPDATE LINES (only while DRAFT) ─────────────────────────────────────────
+  /**
+   * Updates contribution lines for a draft declaration.
+   * @param id - The declaration ID
+   * @param dto - The update DTO
+   * @param currentUser - The current user
+   * @returns The updated declaration
+   */
   async updateLines(
     id: string,
     dto: UpdateDeclarationLinesDto,
@@ -114,11 +128,7 @@ export class DeclarationsService {
       // Remove existing lines and replace
       await manager.delete(ContributionLine, { declarationId: id });
 
-      const newLines = await this.buildContributionLines(
-        id,
-        declaration.employerId,
-        dto.lines,
-      );
+      const newLines = await this.buildContributionLines(id, declaration.employerId, dto.lines);
 
       const savedLines = await manager.save(ContributionLine, newLines);
       await this.recalculateTotals(manager, declaration, savedLines);
@@ -136,14 +146,17 @@ export class DeclarationsService {
     return updatedDeclaration;
   }
 
-  // ── SUBMIT ───────────────────────────────────────────────────────────────────
+  /**
+   * Submits a draft declaration for review.
+   * @param id - The declaration ID
+   * @param currentUser - The current user
+   * @returns The submitted declaration
+   */
   async submit(id: string, currentUser: User): Promise<Declaration> {
     const declaration = await this.getDeclarationWithOwnerCheck(id, currentUser);
 
     if (declaration.status !== DeclarationStatus.DRAFT) {
-      throw new BadRequestException(
-        `Cannot submit declaration with status: ${declaration.status}`,
-      );
+      throw new BadRequestException(`Cannot submit declaration with status: ${declaration.status}`);
     }
 
     const lineCount = await this.lineRepo.count({ where: { declarationId: id } });
@@ -156,7 +169,11 @@ export class DeclarationsService {
     return this.declarationRepo.save(declaration);
   }
 
-  // ── VALIDATE (admin only) ────────────────────────────────────────────────────
+  /**
+   * Validates a submitted declaration.
+   * @param id - The declaration ID
+   * @returns The validated declaration
+   */
   async validate(id: string): Promise<Declaration> {
     const declaration = await this.declarationRepo.findOne({ where: { id } });
     if (!declaration) throw new NotFoundException(`Declaration ${id} not found`);
@@ -172,7 +189,12 @@ export class DeclarationsService {
     return this.declarationRepo.save(declaration);
   }
 
-  // ── REJECT (admin only) ──────────────────────────────────────────────────────
+  /**
+   * Rejects a submitted declaration.
+   * @param id - The declaration ID
+   * @param dto - The reject DTO
+   * @returns The rejected declaration
+   */
   async reject(id: string, dto: RejectDeclarationDto): Promise<Declaration> {
     const declaration = await this.declarationRepo.findOne({ where: { id } });
     if (!declaration) throw new NotFoundException(`Declaration ${id} not found`);
@@ -188,7 +210,12 @@ export class DeclarationsService {
     return this.declarationRepo.save(declaration);
   }
 
-  // ── FIND ALL ─────────────────────────────────────────────────────────────────
+  /**
+   * Finds all declarations matching the query criteria.
+   * @param query - The query parameters
+   * @param currentUser - The current user
+   * @returns A paginated list of declarations
+   */
   async findAll(
     query: DeclarationQueryDto,
     currentUser: User,
@@ -217,12 +244,23 @@ export class DeclarationsService {
     return paginate(data, total, Number(limit), Number(offset));
   }
 
-  // ── FIND ONE ─────────────────────────────────────────────────────────────────
+  /**
+   * Finds a single declaration by ID.
+   * @param id - The declaration ID
+   * @param currentUser - The current user
+   * @returns The declaration
+   */
   async findOne(id: string, currentUser: User): Promise<Declaration> {
     return this.getDeclarationWithOwnerCheck(id, currentUser);
   }
 
-  // ── CONTRIBUTION SUMMARY ─────────────────────────────────────────────────────
+  /**
+   * Retrieves a contribution summary for an employer.
+   * @param employerId - The employer ID
+   * @param query - The query parameters
+   * @param currentUser - The current user
+   * @returns The contribution summary
+   */
   async getContributionSummary(
     employerId: string,
     query: ContributionSummaryQueryDto,
@@ -263,17 +301,17 @@ export class DeclarationsService {
     // Aggregate totals across the filtered range
     const totals = rows.reduce(
       (acc, row) => ({
-        totalPension: acc.totalPension + parseFloat(row.totalPension || 0),
-        totalMedical: acc.totalMedical + parseFloat(row.totalMedical || 0),
-        totalMaternity: acc.totalMaternity + parseFloat(row.totalMaternity || 0),
-        grandTotal: acc.grandTotal + parseFloat(row.grandTotal || 0),
+        totalPension: acc.totalPension + parseFloat(row.totalPension ?? 0),
+        totalMedical: acc.totalMedical + parseFloat(row.totalMedical ?? 0),
+        totalMaternity: acc.totalMaternity + parseFloat(row.totalMaternity ?? 0),
+        grandTotal: acc.grandTotal + parseFloat(row.grandTotal ?? 0),
       }),
       { totalPension: 0, totalMedical: 0, totalMaternity: 0, grandTotal: 0 },
     );
 
     return {
       employer: { id: employer.id, name: employer.name, tin: employer.tin },
-      filter: { from: query.from || null, to: query.to || null },
+      filter: { from: query.from ?? null, to: query.to ?? null },
       monthlyBreakdown: rows.map((r) => ({
         period: r.period,
         status: r.status,
@@ -294,12 +332,14 @@ export class DeclarationsService {
     };
   }
 
-  // ── PRIVATE HELPERS ──────────────────────────────────────────────────────────
-
-  private async getDeclarationWithOwnerCheck(
-    id: string,
-    currentUser: User,
-  ): Promise<Declaration> {
+  /**
+   * Helper method to retrieve a declaration with access control check.
+   * Throws NotFound if declaration doesn't exist, or Forbidden if employer user tries to access another employer's declaration.
+   * @param id - The declaration ID
+   * @param currentUser - The current user
+   * @returns The declaration with relations loaded
+   */
+  private async getDeclarationWithOwnerCheck(id: string, currentUser: User): Promise<Declaration> {
     const declaration = await this.declarationRepo.findOne({
       where: { id },
       relations: ['contributionLines', 'contributionLines.employee', 'employer'],
