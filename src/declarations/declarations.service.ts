@@ -7,7 +7,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Declaration, DeclarationStatus } from './entities/declaration.entity';
 import { ContributionLine } from './entities/contribution-line.entity';
 import { Employee, EmployeeStatus } from '../employees/entities/employee.entity';
@@ -432,7 +432,7 @@ export class DeclarationsService {
   }
 
   private async recalculateTotals(
-    manager: any,
+    manager: EntityManager,
     declaration: Declaration,
     lines: ContributionLine[],
   ): Promise<void> {

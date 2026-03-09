@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { getDataSourceToken, TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EmployersModule } from './employers/employers.module';
 import { EmployeesModule } from './employees/employees.module';
 import { DeclarationsModule } from './declarations/declarations.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
+import { AuditService } from './audit/audit.service';
+import { DataSource } from 'typeorm';
 
 @Module({
   imports: [
@@ -24,7 +28,7 @@ import { DeclarationsModule } from './declarations/declarations.module';
         synchronize: process.env.NODE_ENV === 'development',
         logging: process.env.NODE_ENV === 'development',
         // Connection pool settings
-        poolSize: parseInt(process.env.DB_POOL_SIZE ?? '10', 10),
+        poolSize: parseInt(process.env.DB_POOL_SIZE ?? '20', 10),
         poolErrorHandler: (err) => {
           console.error('Database connection error:', err);
         },
@@ -48,11 +52,18 @@ import { DeclarationsModule } from './declarations/declarations.module';
     EmployersModule,
     EmployeesModule,
     DeclarationsModule,
+    AuditModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard, // Apply rate limiting globally
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (auditService: AuditService, dataSource: DataSource) =>
+        new AuditInterceptor(auditService, dataSource),
+      inject: [AuditService, getDataSourceToken()],
     },
   ],
 })

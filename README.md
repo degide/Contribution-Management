@@ -227,7 +227,7 @@ JWT-based auth using Passport.js `passport-jwt` strategy.
 Pension   = gross_salary × 6.0%
 Medical   = gross_salary × 7.5%
 Maternity = gross_salary × 0.3%
-─────────────────────────────────
+-------------------------------
 Total     = gross_salary × 13.8%
 ```
 
@@ -261,13 +261,11 @@ Rates are defined as constants in `contribution-line.entity.ts` (`CONTRIBUTION_R
 
 ### Security & Reliability
 - **Refresh tokens**: Current JWTs are long-lived (without refresh). Add refresh token rotation with a `refresh_tokens` table for better security.
-- **Audit log table**: Every status transition and sensitive mutation should write to an `audit_logs` table with `who`, `what`, `before`, `after`, and `timestamp`. Critical for a government-grade financial system.
 - **Idempotency keys**: Declaration submission should accept an idempotency key header to prevent double-submits from network retries.
 
 ### Performance
 - **Redis caching**: The contribution summary endpoint is a good candidate for short-lived cache (e.g., 5-minute TTL) since validated declarations don't change.
 - **Background jobs**: Large declaration processing (>1000 employees) should be queued via Bull/BullMQ rather than blocking the HTTP request.
-- **Database connection pooling**: Tune TypeORM pool settings (`max`, `min`, `acquireTimeoutMillis`) based on load testing results.
 
 ### Features
 - **Bulk employee import**: CSV upload to register many employees at once (common need for employers onboarding).

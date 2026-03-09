@@ -147,7 +147,7 @@ export class EmployersService {
     }
 
     // Prevent manually setting status to DELETED through the update endpoint
-    if ((dto as any).status === EmployerStatus.DELETED) {
+    if ((dto as UpdateEmployerDto).status === EmployerStatus.DELETED) {
       throw new BadRequestException('Cannot set status to deleted.');
     }
 
