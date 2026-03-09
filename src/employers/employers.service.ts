@@ -17,7 +17,7 @@ import {
 } from './dto/employer.dto';
 import { paginate, PaginatedResponse } from '../common/dto/pagination.dto';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
-import { EmployeeStatus } from '@/employees/entities/employee.entity';
+import { EmployeeStatus } from '../employees/entities/employee.entity';
 
 @Injectable()
 export class EmployersService {
