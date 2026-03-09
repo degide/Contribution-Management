@@ -54,14 +54,11 @@ async function bootstrap() {
     .setDescription(
       `
   Manages employer registration, employee declaration, and monthly contribution submissions.
-
-  ### Authentication
-  JWT-based authentication for secure access
-
+  
   ### Roles
   - **admin**: Full access to all resources
   - **employer**: Scoped to their own employer record, employees, and declarations
-
+  
   ### Contribution Rates
   | Type | Rate |
   |------|------|
@@ -69,12 +66,12 @@ async function bootstrap() {
   | Medical Insurance | 7.5% |
   | Maternity Leave | 0.3% |
   | **Total** | **13.8%** |
-
-  ### Seed Credentials
-  - Admin: \`admin@rssb.rw\` / \`Admin1234!\`
   
-  - Employer: \`employer@kigalitea.rw\` / \`Employer1234!\`
-  `,
+  ### Seed Credentials
+  - Admin: **admin@rssb.rw** / **Admin1234!**
+  
+  - Employer: **employer@kigalitea.rw** / **Employer1234!**
+    `.trim(),
     )
     .setVersion('1.0.0')
     .addBearerAuth()

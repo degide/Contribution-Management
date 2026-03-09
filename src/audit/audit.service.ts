@@ -68,12 +68,13 @@ export class AuditService {
 
     const qb = this.repo.createQueryBuilder('log').orderBy('log.createdAt', 'DESC');
 
-    if (query.userId) qb.andWhere('log.userId = :v', { v: query.userId });
-    if (query.action) qb.andWhere('log.action ILIKE :v', { v: `%${query.action}%` });
-    if (query.targetType) qb.andWhere('log.targetType ILIKE :v', { v: `%${query.targetType}%` });
-    if (query.targetId) qb.andWhere('log.targetId = :v', { v: query.targetId });
-    if (query.from) qb.andWhere('log.createdAt >= :v', { v: new Date(query.from) });
-    if (query.to) qb.andWhere('log.createdAt <= :v', { v: new Date(query.to) });
+    if (query.userId) qb.andWhere('log.userId = :userId', { userId: query.userId });
+    if (query.action) qb.andWhere('log.action ILIKE :action', { action: `%${query.action}%` });
+    if (query.targetType)
+      qb.andWhere('log.targetType ILIKE :targetType', { targetType: `%${query.targetType}%` });
+    if (query.targetId) qb.andWhere('log.targetId = :targetId', { targetId: query.targetId });
+    if (query.from) qb.andWhere('log.createdAt >= :from', { from: new Date(query.from) });
+    if (query.to) qb.andWhere('log.createdAt <= :to', { to: new Date(query.to) });
 
     qb.take(limit).skip(offset);
 

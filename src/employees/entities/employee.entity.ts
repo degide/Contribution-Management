@@ -18,13 +18,13 @@ export enum EmployeeStatus {
   DELETED = 'deleted',
 }
 
+@Index('idx_employer_national_id', ['employerId', 'nationalId'], { unique: true })
 @Entity('employees')
 export class Employee {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Rwanda national ID (16 digits). unique across the system for each employer
-  @Index({ unique: true })
+  // Rwanda national ID (16 digits)
   @Column({ name: 'national_id' })
   nationalId: string;
 

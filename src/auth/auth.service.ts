@@ -33,9 +33,6 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
 
     // Deliberately vague: don't reveal whether the account exists or is deleted
     if (!user || user.status === UserStatus.DELETED) {

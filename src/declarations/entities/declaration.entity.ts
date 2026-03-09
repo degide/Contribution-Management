@@ -30,7 +30,7 @@ export class Declaration {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Auto-generated unique payment reference number, e.g. "PAY-2024-001-XXXXXX"
+  // Auto-generated unique payment reference number
   @Index({ unique: true })
   @Column({ name: 'payment_number', unique: true })
   paymentNumber: string;

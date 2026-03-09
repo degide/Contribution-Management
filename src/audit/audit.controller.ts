@@ -31,18 +31,8 @@ export class AuditController {
   @ApiOperation({
     summary: '[Admin] List audit logs',
     description: `
-Paginated, newest-first audit trail for every mutating request.
-
-**action** — derived from HTTP method + route. Supports partial match:
-- \`EMPLOYER_UPDATE\` — exact
-- \`EMPLOYER\` — all employer events
-- \`VALIDATE\` — all validate events across resources
-
-**before** — full DB row prior to the mutation. \`null\` for creates.
-
-**after** — sanitised response body. \`null\` for deletes (204 no content).
-
-Passwords and \`password_hash\` are always stripped from both snapshots.
+      Paginated, newest-first audit trail for every mutating request. 
+      Passwords and \`password_hash\` are always stripped from both snapshots.
     `.trim(),
   })
   @ApiQuery({
