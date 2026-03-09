@@ -23,9 +23,9 @@ export class Employee {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Rwanda national ID (16 digits). unique across the system
+  // Rwanda national ID (16 digits). unique across the system for each employer
   @Index({ unique: true })
-  @Column({ name: 'national_id', unique: true })
+  @Column({ name: 'national_id' })
   nationalId: string;
 
   @Column({ name: 'first_name' })
@@ -49,6 +49,22 @@ export class Employee {
 
   @Column({ nullable: true })
   phone: string;
+
+  /**
+   * Indicates if the employee is enrolled in medical insurance.
+   * This can be overridden per declaration period, but defaults to true when creating an employee.
+   */
+  @Column({ name: 'enrolled_medical', default: true })
+  enrolledMedical: boolean;
+
+  /**
+   * Indicates if the employee is enrolled in maternity insurance.
+   * This can be overridden per declaration period, but defaults to true when creating an employee.
+   * Note: In Rwanda, maternity insurance is typically mandatory for female employees,
+   * but this field allows for flexibility in case of exceptions or changes in regulations.
+   */
+  @Column({ name: 'enrolled_maternity', default: true })
+  enrolledMaternity: boolean;
 
   @Column({
     type: 'enum',

@@ -10,7 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Declaration, DeclarationStatus } from './entities/declaration.entity';
 import { ContributionLine } from './entities/contribution-line.entity';
-import { Employee } from '../employees/entities/employee.entity';
+import { Employee, EmployeeStatus } from '../employees/entities/employee.entity';
 import { Employer, EmployerStatus } from '../employers/entities/employer.entity';
 import {
   CreateDeclarationDto,
@@ -18,6 +18,7 @@ import {
   RejectDeclarationDto,
   DeclarationQueryDto,
   ContributionSummaryQueryDto,
+  ContributionLineInputDto,
 } from './dto/declaration.dto';
 import { paginate, PaginatedResponse } from '../common/dto/pagination.dto';
 import { User, UserRole } from '../users/entities/user.entity';
@@ -52,7 +53,9 @@ export class DeclarationsService {
     }
 
     // Validate employer exists and is active
-    const employer = await this.employerRepo.findOne({ where: { id: dto.employerId } });
+    const employer = await this.employerRepo.findOne({
+      where: { id: dto.employerId, status: EmployerStatus.ACTIVE },
+    });
     if (!employer) throw new NotFoundException(`Employer ${dto.employerId} not found`);
     if (employer.status === EmployerStatus.SUSPENDED) {
       throw new BadRequestException('Suspended employers cannot create declarations');
@@ -62,6 +65,7 @@ export class DeclarationsService {
     const duplicate = await this.declarationRepo.findOne({
       where: { employerId: dto.employerId, period: dto.period },
     });
+
     if (duplicate) {
       throw new ConflictException(
         `A declaration for period ${dto.period} already exists (id: ${duplicate.id}, status: ${duplicate.status})`,
@@ -351,33 +355,48 @@ export class DeclarationsService {
       currentUser.role === UserRole.EMPLOYER &&
       declaration.employerId !== currentUser.employerId
     ) {
-      throw new ForbiddenException('Access denied');
+      throw new ForbiddenException('You do not have access to this declaration');
     }
 
     return declaration;
   }
 
+  /**
+   * Resolve enrollment and calculate contribution amounts for each input line.
+   * Validations:
+   *   - Employee must exist, be active, and belong to the employer
+   *   - No duplicate employee IDs within the same declaration
+   * Enrollment override logic:
+   *   - If overrideMedical is provided, it takes priority over the employee's default enrolledMedical value for this period.
+   *   - If overrideMaternity is provided, it takes priority over the employee's default enrolledMaternity value for this period.
+   *   - This allows for flexible handling of mid-year insurance changes or exceptions.
+   * @param declarationId - The declaration ID to associate the lines with
+   * @param employerId - The employer ID for validation
+   * @param inputs - The contribution line input DTOs
+   * @returns An array of ContributionLine entities ready to be saved
+   */
   private async buildContributionLines(
     declarationId: string,
     employerId: string,
-    inputs: { employeeId: string; grossSalary: number }[],
+    inputs: ContributionLineInputDto[],
   ): Promise<ContributionLine[]> {
-    // Deduplicate employeeIds in request
+    // Reject duplicate employee IDs within the same declaration
     const seen = new Set<string>();
-    for (const line of inputs) {
-      if (seen.has(line.employeeId)) {
+    for (const input of inputs) {
+      if (seen.has(input.employeeId)) {
         throw new BadRequestException(
-          `Employee ${line.employeeId} appears more than once in lines`,
+          `Employee ${input.employeeId} appears more than once in lines`,
         );
       }
-      seen.add(line.employeeId);
+      seen.add(input.employeeId);
     }
 
     const lines: ContributionLine[] = [];
 
     for (const input of inputs) {
       const employee = await this.employeeRepo.findOne({ where: { id: input.employeeId } });
-      if (!employee) {
+
+      if (!employee || employee.status === EmployeeStatus.DELETED) {
         throw new NotFoundException(`Employee ${input.employeeId} not found`);
       }
       if (employee.employerId !== employerId) {
@@ -386,7 +405,14 @@ export class DeclarationsService {
         );
       }
 
-      const calc = ContributionLine.calculate(input.grossSalary);
+      // An explicit override in the line DTO takes priority.
+      // Falling back to undefined means "use the employee's stored default".
+      const includeMedical = input.overrideMedical ?? employee.enrolledMedical;
+
+      const includeMaternity = input.overrideMaternity ?? employee.enrolledMaternity;
+
+      const calc = ContributionLine.calculate(input.grossSalary, includeMedical, includeMaternity);
+
       const line = new ContributionLine();
       line.declarationId = declarationId;
       line.employeeId = input.employeeId;
@@ -395,6 +421,9 @@ export class DeclarationsService {
       line.medicalAmount = calc.medicalAmount;
       line.maternityAmount = calc.maternityAmount;
       line.total = calc.total;
+      line.includeMedical = includeMedical;
+      line.includeMaternity = includeMaternity;
+      line.note = input.note;
 
       lines.push(line);
     }
@@ -407,16 +436,12 @@ export class DeclarationsService {
     declaration: Declaration,
     lines: ContributionLine[],
   ): Promise<void> {
-    const totalPension = lines.reduce((s, l) => s + Number(l.pensionAmount), 0);
-    const totalMedical = lines.reduce((s, l) => s + Number(l.medicalAmount), 0);
-    const totalMaternity = lines.reduce((s, l) => s + Number(l.maternityAmount), 0);
-    const grandTotal = lines.reduce((s, l) => s + Number(l.total), 0);
-
+    const round = (n: number) => Math.round(n * 100) / 100;
     await manager.update(Declaration, declaration.id, {
-      totalPension: Math.round(totalPension * 100) / 100,
-      totalMedical: Math.round(totalMedical * 100) / 100,
-      totalMaternity: Math.round(totalMaternity * 100) / 100,
-      grandTotal: Math.round(grandTotal * 100) / 100,
+      totalPension: round(lines.reduce((s, l) => s + Number(l.pensionAmount), 0)),
+      totalMedical: round(lines.reduce((s, l) => s + Number(l.medicalAmount), 0)),
+      totalMaternity: round(lines.reduce((s, l) => s + Number(l.maternityAmount), 0)),
+      grandTotal: round(lines.reduce((s, l) => s + Number(l.total), 0)),
     });
   }
 }

@@ -39,7 +39,7 @@ export class User {
   @Column({ name: 'employer_id', nullable: true })
   employerId: string;
 
- @Column({
+  @Column({
     type: 'enum',
     enum: UserStatus,
     default: UserStatus.ACTIVE,

@@ -84,7 +84,6 @@ export class DeclarationsController {
   }
 }
 
-// Separate controller for the summary endpoint to keep routing clean
 @ApiTags('Declarations')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)

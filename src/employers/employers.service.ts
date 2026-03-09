@@ -124,7 +124,7 @@ export class EmployersService {
     }
 
     const employer = await this.employerRepo.findOne({
-      where: { 
+      where: {
         id,
         // Employer users should not see deleted records even if they know the ID
         ...(currentUser.role === UserRole.EMPLOYER ? { status: Not(EmployerStatus.DELETED) } : {}),

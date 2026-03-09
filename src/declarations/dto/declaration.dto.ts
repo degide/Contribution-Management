@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -9,6 +10,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -28,6 +30,37 @@ export class ContributionLineInputDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   grossSalary: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Per-period medical enrollment override. Omit to use the employee's default." +
+      'Explicit true/false overrides the default for this period only, ' +
+      'useful when an employee switches insurance mid-year.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  overrideMedical?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Per-period maternity enrollment override. Omit to use the employee's default." +
+      'Explicit true/false overrides the default for this period only.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  overrideMaternity?: boolean;
+
+  @ApiPropertyOptional({
+    example: 'Private insurance: Eden Care. Medical opt-out approved 2025-01',
+    description:
+      'Optional free-text note documenting the reason for any enrollment override. ' +
+      'Stored on the contribution line for audit purposes.',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class CreateDeclarationDto {

@@ -36,7 +36,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    
+
     // Deliberately vague: don't reveal whether the account exists or is deleted
     if (!user || user.status === UserStatus.DELETED) {
       throw new UnauthorizedException('Invalid credentials');

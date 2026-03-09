@@ -12,9 +12,9 @@ import { Employee } from '../../employees/entities/employee.entity';
 
 // Contribution rates
 export const CONTRIBUTION_RATES = {
-  PENSION: 0.06, // 6%
-  MEDICAL: 0.075, // 7.5%
-  MATERNITY: 0.003, // 0.3%
+  PENSION: 0.06, // 6% of gross salary (No opt-out for pension)
+  MEDICAL: 0.075, // 7.5% of gross salary
+  MATERNITY: 0.003, // 0.3% of gross salary
 };
 
 @Entity('contribution_lines')
@@ -59,24 +59,47 @@ export class ContributionLine {
   @Column({ name: 'total', type: 'decimal', precision: 15, scale: 2 })
   total: number;
 
+  @Column({ name: 'include_medical', default: true })
+  includeMedical: boolean;
+
+  @Column({ name: 'include_maternity', default: true })
+  includeMaternity: boolean;
+
+  // Notes or comments about this contribution line (e.g. reason for overrides or opt-outs)
+  @Column({ name: 'note', nullable: true, type: 'text' })
+  note?: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  // Helper: calculate contributions from gross salary
-  static calculate(grossSalary: number): {
+  /**
+   * Calculate contribution amounts from gross salary and enrollment flags.
+   *
+   * @param grossSalary     Salary for the period
+   * @param includeMedical  Whether the default provided medical contribution applies
+   * @param includeMaternity  Whether the maternity contribution applies
+   */
+  static calculate(
+    grossSalary: number,
+    includeMedical = true,
+    includeMaternity = true,
+  ): {
     pensionAmount: number;
     medicalAmount: number;
     maternityAmount: number;
     total: number;
   } {
-    const pension = Math.round(grossSalary * CONTRIBUTION_RATES.PENSION * 100) / 100;
-    const medical = Math.round(grossSalary * CONTRIBUTION_RATES.MEDICAL * 100) / 100;
-    const maternity = Math.round(grossSalary * CONTRIBUTION_RATES.MATERNITY * 100) / 100;
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    const pension = round(grossSalary * CONTRIBUTION_RATES.PENSION);
+    const medical = includeMedical ? round(grossSalary * CONTRIBUTION_RATES.MEDICAL) : 0;
+    const maternity = includeMaternity ? round(grossSalary * CONTRIBUTION_RATES.MATERNITY) : 0;
+
     return {
       pensionAmount: pension,
       medicalAmount: medical,
       maternityAmount: maternity,
-      total: Math.round((pension + medical + maternity) * 100) / 100,
+      total: round(pension + medical + maternity),
     };
   }
 }

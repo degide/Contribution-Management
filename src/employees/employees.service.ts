@@ -37,9 +37,13 @@ export class EmployeesService {
       throw new ForbiddenException('You can only register employees for your own company');
     }
 
-    const existing = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId, employerId: dto.employerId } });
+    const existing = await this.employeeRepo.findOne({
+      where: { nationalId: dto.nationalId, employerId: dto.employerId },
+    });
     if (existing) {
-      throw new ConflictException(`Employee with National ID ${dto.nationalId} already exists for this employer`);
+      throw new ConflictException(
+        `Employee with National ID ${dto.nationalId} already exists for this employer`,
+      );
     }
 
     const employee = this.employeeRepo.create({ ...dto, status: EmployeeStatus.ACTIVE });
@@ -98,9 +102,13 @@ export class EmployeesService {
     const employee = await this.findOne(id, currentUser);
 
     if (dto.nationalId && dto.nationalId !== employee.nationalId) {
-      const conflict = await this.employeeRepo.findOne({ where: { nationalId: dto.nationalId, employerId: employee.employerId } });
+      const conflict = await this.employeeRepo.findOne({
+        where: { nationalId: dto.nationalId, employerId: employee.employerId },
+      });
       if (conflict) {
-        throw new ConflictException(`Employee with National ID ${dto.nationalId} is already in use for this employer`);
+        throw new ConflictException(
+          `Employee with National ID ${dto.nationalId} is already in use for this employer`,
+        );
       }
     }
 
@@ -110,7 +118,7 @@ export class EmployeesService {
 
   /**
    * Soft-deletes an employee by setting its status to DELETED and recording the deletion timestamp.
-   * 
+   *
    *  @param id - The ID of the employee to delete
    *  @param currentUser - The user performing the deletion, used for access control
    *  @throws NotFoundException if the employee does not exist or is already deleted

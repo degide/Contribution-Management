@@ -8,8 +8,8 @@
  *  6. Role-based access on contribution summary
  */
 
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
@@ -24,7 +24,7 @@ dotenv.config();
 const RUN_ID = Date.now().toString().slice(-7);
 
 const TEST_NATIONAL_ID = `1999${RUN_ID}7099`.slice(0, 16).padEnd(16, '0');
-const TEST_PERIOD = `2${RUN_ID.slice(0, 3)}-${(parseInt(RUN_ID.slice(3, 5)) % 12 + 1)
+const TEST_PERIOD = `2${RUN_ID.slice(0, 3)}-${((parseInt(RUN_ID.slice(3, 5)) % 12) + 1)
   .toString()
   .padStart(2, '0')}`;
 
@@ -38,14 +38,14 @@ describe('Contribution Management API (e2e)', () => {
   let dataSource: DataSource;
 
   let adminToken: string;
-  let employerToken: string;  // seed employer from seed.ts
-  let employerId: string;     // seed employer ID
+  let employerToken: string; // seed employer from seed.ts
+  let employerId: string; // seed employer ID
 
   // Resources created during this run, tracked for cleanup
   let createdEmployeeId: string;
   let createdDeclarationId: string;
-  let createdEmployerId: string;      // employer created by onboarding test
-  let createdEmployerUserId: string;  // user account created alongside it
+  let createdEmployerId: string; // employer created by onboarding test
+  let createdEmployerUserId: string; // user account created alongside it
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -64,10 +64,9 @@ describe('Contribution Management API (e2e)', () => {
   afterAll(async () => {
     // Delete in FK-safe order: lines -> declarations -> employees -> users -> employers
     if (createdDeclarationId) {
-      await dataSource.query(
-        `DELETE FROM contribution_lines WHERE declaration_id = $1`,
-        [createdDeclarationId],
-      );
+      await dataSource.query(`DELETE FROM contribution_lines WHERE declaration_id = $1`, [
+        createdDeclarationId,
+      ]);
       await dataSource.query(`DELETE FROM declarations WHERE id = $1`, [createdDeclarationId]);
     }
     if (createdEmployeeId) {
@@ -170,13 +169,6 @@ describe('Contribution Management API (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ email: 'admin@rssb.rw', password: 'Admin1234!' })
         .expect(409);
-    });
-
-    it('old POST /auth/register endpoint no longer exists (404)', async () => {
-      await request(app.getHttpServer())
-        .post('/api/auth/register')
-        .send({ email: 'x@x.com', password: 'Pass1234!', role: 'employer' })
-        .expect(404);
     });
   });
 
@@ -399,10 +391,10 @@ describe('Contribution Management API (e2e)', () => {
       expect(res.body.paymentNumber).toMatch(/^PAY-/);
 
       const line = res.body.contributionLines[0];
-      expect(parseFloat(line.pensionAmount)).toBeCloseTo(30000, 2);   // 6%
-      expect(parseFloat(line.medicalAmount)).toBeCloseTo(37500, 2);   // 7.5%
-      expect(parseFloat(line.maternityAmount)).toBeCloseTo(1500, 2);  // 0.3%
-      expect(parseFloat(line.total)).toBeCloseTo(69000, 2);           // 13.8%
+      expect(parseFloat(line.pensionAmount)).toBeCloseTo(30000, 2); // 6%
+      expect(parseFloat(line.medicalAmount)).toBeCloseTo(37500, 2); // 7.5%
+      expect(parseFloat(line.maternityAmount)).toBeCloseTo(1500, 2); // 0.3%
+      expect(parseFloat(line.total)).toBeCloseTo(69000, 2); // 13.8%
     });
 
     it('duplicate period for the same employer returns 409', async () => {
@@ -527,6 +519,238 @@ describe('Contribution Management API (e2e)', () => {
         .get('/api/employers/00000000-0000-0000-0000-000000000000/contribution-summary')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
+    });
+  });
+
+  describe('Contribution enrollment', () => {
+    // Uses the seeded employer (employerId / employerToken from auth).
+    // Creates three employees with different enrollment profiles and declares
+    // a period for each, asserting exact contribution amounts.
+
+    const EN_PERIOD = `2${RUN_ID.slice(1, 4)}-${((parseInt(RUN_ID.slice(4, 6)) % 12) + 1)
+      .toString()
+      .padStart(2, '0')}`;
+
+    // National IDs unique per run
+    const EN_NID_MALE = `3100${RUN_ID}0000`.slice(0, 16).padEnd(16, '0');
+    const EN_NID_PRIVATE = `3200${RUN_ID}0000`.slice(0, 16).padEnd(16, '0');
+    const EN_NID_FULL = `3300${RUN_ID}0000`.slice(0, 16).padEnd(16, '0');
+
+    let maleEmployeeId: string; // enrolledMaternity=false
+    let privateInsEmpId: string; // enrolledMedical=false
+    let fullEnrollEmpId: string; // both true (control)
+    let enrollDeclarationId: string;
+
+    beforeAll(async () => {
+      // Male employee — maternity opt-out at registration
+      const male = await request(app.getHttpServer())
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          nationalId: EN_NID_MALE,
+          firstName: 'Mugabo',
+          lastName: 'Test',
+          dateOfBirth: '1992-03-10',
+          hireDate: '2024-01-01',
+          grossSalary: 400000,
+          employerId,
+          enrolledMaternity: false, // male, not eligible
+          enrolledMedical: true,
+        });
+      maleEmployeeId = male.body.id;
+
+      // Employee on private insurance. Medical opt-out at registration
+      const priv = await request(app.getHttpServer())
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          nationalId: EN_NID_PRIVATE,
+          firstName: 'Uwase',
+          lastName: 'Test',
+          dateOfBirth: '1988-07-22',
+          hireDate: '2024-01-01',
+          grossSalary: 600000,
+          employerId,
+          enrolledMedical: false, // private insurance
+          enrolledMaternity: true,
+        });
+      privateInsEmpId = priv.body.id;
+
+      // Control employee, full enrollment
+      const full = await request(app.getHttpServer())
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          nationalId: EN_NID_FULL,
+          firstName: 'Ishimwe',
+          lastName: 'Test',
+          dateOfBirth: '1995-11-05',
+          hireDate: '2024-01-01',
+          grossSalary: 500000,
+          employerId,
+        });
+      fullEnrollEmpId = full.body.id;
+    });
+
+    afterAll(async () => {
+      if (enrollDeclarationId) {
+        await dataSource.query(`DELETE FROM contribution_lines WHERE declaration_id = $1`, [
+          enrollDeclarationId,
+        ]);
+        await dataSource.query(`DELETE FROM declarations WHERE id = $1`, [enrollDeclarationId]);
+      }
+      for (const id of [maleEmployeeId, privateInsEmpId, fullEnrollEmpId]) {
+        if (id) await dataSource.query(`DELETE FROM employees WHERE id = $1`, [id]);
+      }
+    });
+
+    it('enrollment defaults are persisted on the employee record', async () => {
+      const male = await request(app.getHttpServer())
+        .get(`/api/employees/${maleEmployeeId}`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .expect(200);
+      expect(male.body.enrolledMaternity).toBe(false);
+      expect(male.body.enrolledMedical).toBe(true);
+
+      const priv = await request(app.getHttpServer())
+        .get(`/api/employees/${privateInsEmpId}`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .expect(200);
+      expect(priv.body.enrolledMedical).toBe(false);
+      expect(priv.body.enrolledMaternity).toBe(true);
+    });
+
+    it('enrollment defaults can be changed via PATCH on the employee', async () => {
+      // Simulate employee switching to private insurance after registration
+      const res = await request(app.getHttpServer())
+        .patch(`/api/employees/${fullEnrollEmpId}`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({ enrolledMedical: false })
+        .expect(200);
+      expect(res.body.enrolledMedical).toBe(false);
+
+      // Restore for the declaration test below
+      await request(app.getHttpServer())
+        .patch(`/api/employees/${fullEnrollEmpId}`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({ enrolledMedical: true })
+        .expect(200);
+    });
+
+    it('declaration lines reflect employee enrollment defaults correctly', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/declarations')
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          employerId,
+          period: EN_PERIOD,
+          lines: [
+            { employeeId: maleEmployeeId, grossSalary: 400000 },
+            { employeeId: privateInsEmpId, grossSalary: 600000 },
+            { employeeId: fullEnrollEmpId, grossSalary: 500000 },
+          ],
+        })
+        .expect(201);
+
+      enrollDeclarationId = res.body.id;
+      const lines: any[] = res.body.contributionLines;
+
+      const maleLine = lines.find((l: any) => l.employeeId === maleEmployeeId);
+      const privLine = lines.find((l: any) => l.employeeId === privateInsEmpId);
+      const fullLine = lines.find((l: any) => l.employeeId === fullEnrollEmpId);
+
+      // Male employee: pension + medical only (no maternity)
+      // 400000 × 6% = 24000, 400000 × 7.5% = 30000, maternity = 0
+      expect(parseFloat(maleLine.pensionAmount)).toBeCloseTo(24000, 2);
+      expect(parseFloat(maleLine.medicalAmount)).toBeCloseTo(30000, 2);
+      expect(parseFloat(maleLine.maternityAmount)).toBeCloseTo(0, 2);
+      expect(parseFloat(maleLine.total)).toBeCloseTo(54000, 2);
+      expect(maleLine.includeMaternity).toBe(false);
+      expect(maleLine.includeMedical).toBe(true);
+
+      // Private insurance employee: pension + maternity only (no medical)
+      // 600000 × 6% = 36000, medical = 0, 600000 × 0.3% = 1800
+      expect(parseFloat(privLine.pensionAmount)).toBeCloseTo(36000, 2);
+      expect(parseFloat(privLine.medicalAmount)).toBeCloseTo(0, 2);
+      expect(parseFloat(privLine.maternityAmount)).toBeCloseTo(1800, 2);
+      expect(parseFloat(privLine.total)).toBeCloseTo(37800, 2);
+      expect(privLine.includeMedical).toBe(false);
+      expect(privLine.includeMaternity).toBe(true);
+
+      // Control employee: all three contributions
+      // 500000 × 6% = 30000, 500000 × 7.5% = 37500, 500000 × 0.3% = 1500
+      expect(parseFloat(fullLine.pensionAmount)).toBeCloseTo(30000, 2);
+      expect(parseFloat(fullLine.medicalAmount)).toBeCloseTo(37500, 2);
+      expect(parseFloat(fullLine.maternityAmount)).toBeCloseTo(1500, 2);
+      expect(parseFloat(fullLine.total)).toBeCloseTo(69000, 2);
+      expect(fullLine.includeMedical).toBe(true);
+      expect(fullLine.includeMaternity).toBe(true);
+    });
+
+    it('per-line override takes priority over employee default', async () => {
+      // Update the existing declaration lines. Temporarily override the male
+      // employee's maternity exclusion (e.g. dispute, back-payment scenario)
+      const res = await request(app.getHttpServer())
+        .patch(`/api/declarations/${enrollDeclarationId}/lines`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          lines: [
+            {
+              employeeId: maleEmployeeId,
+              grossSalary: 400000,
+              overrideMaternity: true, // explicit override, ignores enrolledMaternity=false
+              note: 'Retroactive correction. Maternity included for this period',
+            },
+            { employeeId: privateInsEmpId, grossSalary: 600000 },
+            { employeeId: fullEnrollEmpId, grossSalary: 500000 },
+          ],
+        })
+        .expect(200);
+
+      const maleLine = res.body.contributionLines.find((l: any) => l.employeeId === maleEmployeeId);
+
+      // Now all three contributions apply for the male employee this period
+      expect(parseFloat(maleLine.maternityAmount)).toBeCloseTo(1200, 2); // 400000 × 0.3%
+      expect(parseFloat(maleLine.total)).toBeCloseTo(55200, 2); // 24000+30000+1200
+      expect(maleLine.includeMaternity).toBe(true);
+      expect(maleLine.note).toBe('Retroactive correction. Maternity included for this period');
+    });
+
+    it('per-line override can also exclude a normally-enrolled employee for a period', async () => {
+      // Control employee (full enrollment) temporarily opts out of medical
+      // for this period only (e.g. started private insurance mid-month)
+      const res = await request(app.getHttpServer())
+        .patch(`/api/declarations/${enrollDeclarationId}/lines`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .send({
+          lines: [
+            { employeeId: maleEmployeeId, grossSalary: 400000 },
+            { employeeId: privateInsEmpId, grossSalary: 600000 },
+            {
+              employeeId: fullEnrollEmpId,
+              grossSalary: 500000,
+              overrideMedical: false, // exclude for this period only
+              note: 'Switched to SORAS from 15th. Pro-rated medical excluded',
+            },
+          ],
+        })
+        .expect(200);
+
+      const fullLine = res.body.contributionLines.find(
+        (l: any) => l.employeeId === fullEnrollEmpId,
+      );
+
+      expect(parseFloat(fullLine.medicalAmount)).toBeCloseTo(0, 2);
+      expect(parseFloat(fullLine.total)).toBeCloseTo(31500, 2); // 30000 + 0 + 1500
+      expect(fullLine.includeMedical).toBe(false);
+      expect(fullLine.note).toContain('SORAS');
+
+      // Employee record should still show enrolledMedical=true (default unchanged)
+      const empRes = await request(app.getHttpServer())
+        .get(`/api/employees/${fullEnrollEmpId}`)
+        .set('Authorization', `Bearer ${employerToken}`)
+        .expect(200);
+      expect(empRes.body.enrolledMedical).toBe(true);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsNotEmpty,
@@ -11,7 +12,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: '1198780123456789', description: 'Rwanda National ID (16 digits)' })
@@ -59,6 +60,28 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether default medical contribution (RSSB) applies. Set false when the employee is ' +
+      'covered by a private/alternative insurance scheme (e.g. Eden care).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value ?? true)
+  enrolledMedical?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Whether maternity contribution applies. Typically false for male employees ' +
+      'or specific contract types ineligible for maternity benefits.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value ?? true)
+  enrolledMaternity?: boolean;
 }
 
 export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {}
