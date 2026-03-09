@@ -1,16 +1,17 @@
 # Employer Contribution Management API
 
-A production-grade backend for an Employer Contribution Management System. Built with NestJS, TypeORM, and PostgreSQL.
+A backend for an Employer Contribution Management System. Built with NestJS, TypeORM, and PostgreSQL.
 
 ## Quick Start
 
 **With Docker (recommended):**
 
 ```bash
-git clone git remote add origin https://github.com/degide/Contribution-Management.git
+git clone https://github.com/degide/Contribution-Management.git
 cd Contribution-Management
 docker compose up --build
 ```
+
 API: http://localhost:3000/api  
 Swagger: http://localhost:3000/api/docs
 
@@ -33,7 +34,21 @@ npm run start:dev
 ```bash
 cp .env.example .env
 ```
-Edit `.env` with your DB credentials. The defaults match the Docker Compose setup.
+
+Edit `.env` with your database credentials. The defaults match the Docker Compose setup.
+
+Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | Postgres host |
+| `DB_PORT` | `5432` | Postgres port |
+| `DB_USERNAME` | `rssb_user` | Database user |
+| `DB_PASSWORD` | `rssb_password` | Database password |
+| `DB_NAME` | `rssb_db` | Database name |
+| `DB_POOL_SIZE` | `10` | Connection pool size |
+| `JWT_SECRET` | — | Required. Set a strong secret. |
+| `JWT_EXPIRES_IN` | `24h` | Token lifetime |
 
 ### 2. Install Dependencies
 ```bash
@@ -59,7 +74,8 @@ npm run start:prod  # production build
 
 Visit: **http://localhost:3000/api/docs**
 
-Use the seed credentials to log in:
+Seed credentials:
+
 | Role | Email | Password |
 |------|-------|----------|
 | admin | `admin@rssb.rw` | `Admin1234!` |
@@ -69,169 +85,186 @@ Use the seed credentials to log in:
 ### 6. Tests
 ```bash
 npm run test         # unit tests
-npm run test:e2e     # end-to-end tests (requires running DB and .env configured)
+npm run test:e2e     # end-to-end tests (requires a running DB)
 npm run test:cov     # coverage report
 ```
 
 ## API Overview
 
-All endpoints are prefixed with `/api/[version]`. JWT Bearer token required on all endpoints except `/auth/*`.
+All endpoints are prefixed with `/api`. JWT Bearer token required on all endpoints except `POST /auth/login`.
 
 ### Auth
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/login` | Login -> returns JWT |
-| POST | `/auth/register-admin` | Create admin account |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/login` | public | Login -> JWT |
+| POST | `/auth/register-admin` | admin | Create admin account |
 
 ### Employers
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/employers` | admin | Create employer |
-| GET | `/employers` | any | List (scoped by role) |
+| POST | `/employers` | admin | Onboard employer + create login atomically |
+| GET | `/employers` | any | List (admin sees all; employer sees own) |
 | GET | `/employers/:id` | any | Get employer |
-| PATCH | `/employers/:id` | any | Update |
-| DELETE | `/employers/:id` | admin | Delete |
+| PATCH | `/employers/:id` | any | Update business details |
+| DELETE | `/employers/:id` | admin | Soft-delete (cascades to linked user + employees) |
 | PATCH | `/employers/:id/suspend` | admin | Suspend employer |
+| GET | `/employers/:id/contribution-summary` | any | Monthly breakdown with optional `?from=YYYY-MM&to=YYYY-MM` |
 
 ### Employees
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/employees` | any | Register employee |
-| GET | `/employees` | any | List (scoped by role) |
+| GET | `/employees` | any | List (scoped to employer) |
 | GET | `/employees/:id` | any | Get employee |
-| PATCH | `/employees/:id` | any | Update |
-| DELETE | `/employees/:id` | any | Remove |
+| PATCH | `/employees/:id` | any | Update (includes enrollment defaults) |
+| DELETE | `/employees/:id` | any | Soft-delete (row retained for audit) |
 
 ### Declarations
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/declarations` | any | Create draft declaration |
 | GET | `/declarations` | any | List (scoped by role) |
-| GET | `/declarations/:id` | any | Get declaration with lines |
-| PATCH | `/declarations/:id/lines` | employer | Update lines (draft only) |
-| PATCH | `/declarations/:id/submit` | employer | Submit draft |
-| PATCH | `/declarations/:id/validate` | admin | Validate submitted |
+| GET | `/declarations/:id` | any | Get declaration with all contribution lines |
+| PATCH | `/declarations/:id/lines` | employer | Replace lines (draft only) |
+| PATCH | `/declarations/:id/submit` | employer | Submit for admin review |
+| PATCH | `/declarations/:id/validate` | admin | Approve |
 | PATCH | `/declarations/:id/reject` | admin | Reject with reason |
 
-### Contribution Summary
+### Audit Logs
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/employers/:id/contribution-summary` | any | Monthly summary with optional `?from=YYYY-MM&to=YYYY-MM` |
+| GET | `/audit-logs` | admin | Paginated audit trail with before/after snapshots |
 
-All list endpoints support pagination: `?limit=10&offset=0`
+Supports filters: `?action=EMPLOYER_UPDATE`, `?targetType=Employer`, `?targetId=<uuid>`, `?userId=<uuid>`, `?from=<ISO-8601>&to=<ISO-8601>`
+
+All list endpoints accept `?limit=10&offset=0`.
 
 ## Architecture Decisions
 
-### 1. Module-per-Domain Structure
-Each domain (auth, employers, employees, declarations) is a self-contained NestJS module with its own controller, service, DTOs, and entities. This mirrors real-world DDD (Domain-Driven Design) and makes the codebase easy to navigate and test in isolation.
+### 1. Module-per-Domain
+Each domain (auth, employers, employees, declarations, audit) is a self-contained NestJS module with its own controller, service, DTOs, and entities. This makes each domain testable in isolation and easy to locate when something needs changing.
 
-### 2. Transaction-Backed Declaration Creation
-Creating a declaration involves inserting the declaration record, all contribution lines, and updating cached totals using three separate writes. These are wrapped in a TypeORM `DataSource.transaction()` to ensure atomicity: either all succeed or none do. This prevents orphaned declarations without lines.
+### 2. Atomic Employer Onboarding
+`POST /employers` creates both the employer record and its linked user account inside a single `DataSource.transaction()`. If either insert fails, duplicate TIN, duplicate email, the whole operation rolls back cleanly. This means there is no state where an employer record exists without a login, or vice versa.
 
-### 3. Cached Totals on Declaration
-Rather than summing contribution lines at query time (which is costly for large declarations), the `declarations` table stores pre-computed `total_pension`, `total_medical`, `total_maternity`, and `grand_total`. These are recalculated whenever lines change or are replaced. This trades a small amount of write complexity for much faster read performance on the summary endpoint.
+### 3. Transaction-Backed Declaration Creation
+A single declaration write touches three things: the declaration row, all contribution lines, and the cached totals. All three are wrapped in one transaction so it is impossible to have a declaration with missing lines or stale totals due to a partial failure.
 
-### 4. Status-as-State-Machine
-The declaration follows a strict state machine:
+### 4. Cached Totals on Declaration
+The `declarations` table stores pre-computed `total_pension`, `total_medical`, `total_maternity`, and `grand_total` columns, recalculated whenever lines change. The alternative, summing lines at query time, is wasteful when the contribution summary endpoint aggregates across many declarations at once.
+
+### 5. Declaration Status Machine
 ```
 DRAFT -> SUBMITTED -> VALIDATED -> REJECTED
 ```
-Transitions are enforced in the service layer (not just the DB). An employer can only submit from DRAFT, an admin can only validate/reject from SUBMITTED. Once submitted or validated, lines cannot be edited.
+Transitions are enforced in the service layer. Employers can only submit from DRAFT; admins can only validate or reject from SUBMITTED. Once submitted, lines cannot be edited. A rejected declaration is terminal, the employer creates a fresh one.
 
-### 5. Decimal Precision
-All monetary values use `DECIMAL(15,2)` (not `FLOAT`) to avoid floating-point rounding errors that are critical in financial systems. JavaScript arithmetic on these values is rounded to 2 decimal places using `Math.round(x * 100) / 100` before persistence.
+### 6. Soft Delete Across All Resources
+No row is ever hard-deleted. Employers, employees, and users all get a `status = 'deleted'` flag and a `deleted_at` timestamp instead. This preserves foreign key integrity (declared contribution lines still reference their employees), keeps the full history intact, and means deleted records are excluded from all list and lookup queries at the service layer, not the database layer, so the data is always recoverable.
 
-### 6. UUID Primary Keys
-UUIDs (v4) are used for all primary keys instead of auto-incrementing integers. This avoids exposing internal record counts, makes IDs safe to share in URLs, and simplifies future data migrations or multi-tenant setups.
+Deleting an employer cascades in a single transaction: the employer, its linked user account, and all active employees are soft-deleted together. A deleted user's JWT is rejected immediately on the next request, the strategy checks `status === 'active'` on every token validation rather than waiting for the token to expire.
 
-### 7. Role-Based Data Scoping in Service Layer
-Authorization is enforced in the service layer (not just guards), so that even if a controller guard is misconfigured, an employer cannot access another employer's employees or declarations. Every "sensitive" service method performs an explicit ownership check after fetching the resource.
+### 7. Contribution Enrollment Defaults with Per-Period Overrides
+Each employee carries two enrollment flags, `enrolledMedical` and `enrolledMaternity`, that represent their standing default across all future declarations. These are set once (e.g. `enrolledMedical: false` for an employee on a private insurance scheme) and automatically applied when declaration lines are built.
 
-### 8. Separate ContributionSummaryController
-The summary endpoint lives at `/employers/:id/contribution-summary`, which makes it semantically clear it's a per-employer report. To avoid cluttering `EmployersController` with declaration logic, it's implemented in a second controller exported by `DeclarationsModule`. NestJS supports multiple controllers per module cleanly.
+A per-line override (`overrideMedical`, `overrideMaternity`) can flip the default for a single declaration period without changing the employee record. The resolution rule is simple: the override wins when present; the employee default applies otherwise.
 
-## Database Design & Indexes
+Once a declaration line is created, its `includeMedical` and `includeMaternity` flags are frozen. Later changes to the employee's defaults do not retroactively affect past declarations.
 
-### Why These Indexes?
+### 8. Global Audit Interceptor, No Decorators
+Every mutating request (`POST`, `PATCH`, `PUT`, `DELETE`) is audited automatically by a single `APP_INTERCEPTOR` registered in `AppModule`. No controller or service needs to know auditing exists.
+
+The interceptor derives a human-readable action name from the HTTP method and the matched Express route pattern:
+
+```
+POST   /employers                 -> EMPLOYER_CREATE
+PATCH  /employers/:id/suspend     -> EMPLOYER_SUSPEND
+PATCH  /declarations/:id/lines    -> DECLARATION_UPDATE_LINES
+PATCH  /declarations/:id/validate -> DECLARATION_VALIDATE
+```
+
+Before the handler runs, it fetches the current DB row (`before_state`). After the handler responds, it captures the response body (`after_state`). Both are stored as top-level JSONB columns on the audit log, not nested inside a generic metadata blob, so they can be queried directly in Postgres:
 
 ```sql
--- Employer TIN must be globally unique
+SELECT * FROM audit_logs
+WHERE before_state->>'status' = 'draft'
+  AND after_state->>'status'  = 'submitted';
+```
+
+Passwords and `password_hash` values are stripped from every snapshot recursively before storage. The audit write is fire-and-forget, a failure writing to `audit_logs` never affects the response.
+
+### 9. Connection Pooling
+The TypeORM connection pool size is configurable via `DB_POOL_SIZE` (default `10`). Worth noting: the audit interceptor performs a `SELECT` against the DB before every mutating request (to capture `before_state`), so at peak load each audit-eligible request momentarily holds two connections from the pool, one for the snapshot, one for the handler. Keep this in mind when sizing the pool under concurrent load; `20` is a reasonable starting point for production.
+
+### 10. Service-Layer Data Scoping
+Role enforcement happens in the service layer, not only at the guard level. An employer user is silently filtered to their own resources regardless of which ID they pass in the URL. This means a misconfigured guard cannot accidentally expose another employer's data.
+
+### 11. Separate ContributionSummaryController
+The `GET /employers/:id/contribution-summary` endpoint is implemented as a second controller inside `DeclarationsModule` rather than adding declaration logic to `EmployersController`. NestJS supports multiple controllers per module cleanly, and this keeps each module's controller focused on one resource type.
+
+## Database Design
+
+### Schema Overview
+
+```
+users           : login credentials + role + employer FK
+employers       : business registration, status, sector
+employees       : person data, salary, enrollment flags, employer FK
+declarations    : period, status workflow, cached totals, employer FK
+contribution_lines : per-employee amounts for a declaration, enrollment snapshot
+audit_logs      : immutable record of every mutating request
+```
+
+### Indexes
+
+```sql
+-- Employer TIN is globally unique (Rwanda Revenue Authority format)
 CREATE UNIQUE INDEX "UQ_employers_tin" ON employers (tin);
 
 -- National ID uniquely identifies a person across all employers
 CREATE UNIQUE INDEX "UQ_employees_national_id" ON employees (national_id);
 
--- Most employee queries filter by employer to avoids sequential scans
+-- Most employee queries filter by employer
 CREATE INDEX "IDX_employees_employer_id" ON employees (employer_id);
 
 -- Core business rule: one declaration per employer per period
 CREATE UNIQUE INDEX "UQ_declaration_employer_period" ON declarations (employer_id, period);
 
--- Summary queries filter and sort by (employer_id, period) index
+-- Contribution summary queries always filter on (employer_id, period)
 CREATE INDEX "IDX_declarations_employer_period" ON declarations (employer_id, period);
 
--- Admin dashboard often filters by status
+-- Admin dashboard filters by status
 CREATE INDEX "IDX_declarations_status" ON declarations (status);
 
 -- Line lookups always start with declaration_id
 CREATE INDEX "IDX_contribution_lines_declaration" ON contribution_lines (declaration_id);
 
 -- Prevents an employee appearing twice in the same declaration
-CREATE UNIQUE INDEX "UQ_contribution_line_declaration_employee" ON contribution_lines (declaration_id, employee_id);
+CREATE UNIQUE INDEX "UQ_contribution_line_declaration_employee"
+  ON contribution_lines (declaration_id, employee_id);
+
+-- Audit lookups: by actor, action type, target resource, or time window
+CREATE INDEX "IDX_audit_user_id"    ON audit_logs (user_id);
+CREATE INDEX "IDX_audit_action"     ON audit_logs (action);
+CREATE INDEX "IDX_audit_target"     ON audit_logs (target_type, target_id);
+CREATE INDEX "IDX_audit_created_at" ON audit_logs (created_at DESC);
+
+-- Partial indexes to filter out soft-deleted records efficiently
+CREATE INDEX "IDX_users_status"      ON users      (status) WHERE status = 'active';
+CREATE INDEX "IDX_employees_status"  ON employees  (status) WHERE status = 'active';
+CREATE INDEX "IDX_employers_status"  ON employers  (status) WHERE status != 'deleted';
 ```
-
-**EXPLAIN analysis (conceptual):**
-- The composite index on `(employer_id, period)` means the contribution summary query is an **Index Scan** rather than a **Seq Scan**: critical when an employer has hundreds of declarations.
-- The unique constraint on `(declaration_id, employee_id)` enforces duplicate-employee prevention at the DB level as a safety net, even if the service layer check is bypassed.
-
-## Business Rules Enforced
-
-| Rule | Enforcement Level |
-|------|------------------|
-| Unique TIN per employer | DB unique index + service check |
-| Unique national ID per employee | DB unique index + service check |
-| One declaration per employer per period | DB composite unique index + service check |
-| Unique payment number | DB unique index + `@BeforeInsert` generator |
-| Draft-only edits | Service layer state check |
-| Cannot submit empty declaration | Service layer count check |
-| Employer can only access own data | Service layer ownership check |
-| Suspended employer cannot create declarations | Service layer status check |
-| Employee must belong to declaring employer | Service layer foreign key check |
-
-## Authentication & Authorization
-
-JWT-based auth using Passport.js `passport-jwt` strategy.
-
-**Token payload:**
-```json
-{ 
-  "sub": "<userId>", 
-  "email": "...", 
-  "role": "employer|admin", 
-  "employerId": "<uuid>|null" 
-}
-```
-
-**Role enforcement:**
-- `JwtAuthGuard`: validates token and attaches `request.user`
-- `RolesGuard` + `@Roles(...)`: checks role on handler/class
-- Service-layer scoping: employer users are silently filtered to their own data
-
-**Rate limiting:**
-- Auth endpoints: stricter limits (5 registrations/min, 10 logins/min)
-- All other endpoints: 60 requests/min via global `ThrottlerGuard`
 
 ## Contribution Calculation
 
 ```
-Pension   = gross_salary × 6.0%
-Medical   = gross_salary × 7.5%
-Maternity = gross_salary × 0.3%
--------------------------------
-Total     = gross_salary × 13.8%
+Pension   = gross_salary × 6.0%   (always applied)
+Medical   = gross_salary × 7.5%   (zero if employee opted out)
+Maternity = gross_salary × 0.3%   (zero if employee not eligible)
 ```
 
-**Example salary of 500,000 RWF:**
+Example for a salary of 500,000 RWF with full enrollment:
+
 | Type | Rate | Amount (RWF) |
 |------|------|-------------|
 | Pension | 6% | 30,000 |
@@ -239,42 +272,123 @@ Total     = gross_salary × 13.8%
 | Maternity Leave | 0.3% | 1,500 |
 | **Total** | **13.8%** | **69,000** |
 
-Rates are defined as constants in `contribution-line.entity.ts` (`CONTRIBUTION_RATES`) to make future rate changes a single-file edit.
+An employee on private insurance (`enrolledMedical: false`) with the same salary contributes only 31,500 RWF (pension + maternity only). The rates are defined as named constants in `contribution-line.entity.ts` so a future rate change is a single-file edit.
 
-## Assumptions Made
+## Business Rules
 
-1. **One user per employer**: The system links one user account to each employer. Multi-user employer accounts (e.g. HR + Finance roles) are not in scope but could be added with an `employer_users` join table.
+| Rule | Enforcement |
+|------|-------------|
+| Unique TIN per employer | DB unique index + service check |
+| Unique national ID per employee | DB unique index + service check |
+| National ID remains reserved after soft-delete | No hard delete; unique index always holds |
+| One declaration per employer per period | DB composite unique index + service check |
+| Unique payment number | DB unique index + `@BeforeInsert` generator |
+| Draft-only line edits | Service layer state check |
+| Cannot submit an empty declaration | Service layer line count check |
+| Employer can only access own data | Service layer ownership check |
+| Suspended employer cannot create declarations | Service layer status check |
+| Employee must belong to the declaring employer | Service layer FK check |
+| Deleted user's JWT rejected immediately | JWT strategy checks `status === 'active'` |
+| Pension is always applied, no opt-out | No `enrolledPension` flag; always calculated |
+| Contribution line enrollment flags are immutable | Set at creation; never updated in place |
 
-2. **Gross salary override per period**: When creating declaration lines, callers can pass a `grossSalary` that overrides the employee's base salary for that period. This models real-world scenarios where salary changes mid-year or a bonus month occurs.
+## Authentication
 
-3. **Payment number is for reference only**: It's auto-generated and guaranteed unique, but it is not validated against any external payment gateway. The assumption is this number is used to match bank transfers to declarations.
+JWT-based via `passport-jwt`.
 
-4. **Period validation is format-only**: The system validates `YYYY-MM` format but does not prevent creating a declaration for a future or distant past period. In production, you'd add a business rule like "cannot declare for periods more than 3 months in the past".
+**Token payload:**
+```json
+{
+  "sub": "<userId>",
+  "email": "...",
+  "role": "employer|admin",
+  "employerId": "<uuid>|null"
+}
+```
 
-5. **TIN is always 9 digits**: Based on Rwanda Revenue Authority format. This validation can be relaxed for multi-country deployments.
+**How it works:**
+- `JwtAuthGuard` validates the token and attaches `req.user`
+- `RolesGuard` + `@Roles(...)` enforces role requirements at the handler level
+- `JwtStrategy.validate()` checks `user.status === 'active'` on every request, deleted accounts are locked out without waiting for token expiry
+- Service methods perform an additional ownership check to scope employer users to their own data
 
-6. **Rejection means re-declaration**: A rejected declaration cannot be re-submitted. The employer must create a new declaration for the same period. This is the simpler model; an alternative would be allowing a rejected -> draft transition.
+**Rate limits:**
+- Login: 10 requests/minute
+- Register admin: 5 requests/minute
+- All other endpoints: 60 requests/minute (global `ThrottlerGuard`)
 
-7. **Contribution rates are employer-side only**: The rates (6%, 7.5%, 0.3%) represent only the employer's contribution.
+## Audit Log Entry Structure
 
-## What I'd Improve with More Time
+Every mutating request produces one row in `audit_logs`:
 
-### Security & Reliability
-- **Refresh tokens**: Current JWTs are long-lived (without refresh). Add refresh token rotation with a `refresh_tokens` table for better security.
-- **Idempotency keys**: Declaration submission should accept an idempotency key header to prevent double-submits from network retries.
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "userEmail": "admin@rssb.rw",
+  "userRole": "admin",
+  "action": "DECLARATION_VALIDATE",
+  "targetType": "Declaration",
+  "targetId": "uuid",
+  "before": {
+    "id": "uuid",
+    "status": "submitted",
+    "period": "2025-01",
+    "grand_total": "69000.00"
+  },
+  "after": {
+    "id": "uuid",
+    "status": "validated",
+    "period": "2025-01",
+    "grand_total": "69000.00",
+    "validated_at": "2025-03-09T10:00:00Z"
+  },
+  "ipAddress": "192.168.1.1",
+  "createdAt": "2025-03-09T10:00:00Z"
+}
+```
+
+- `before` is `null` for creates (no prior row exists)
+- `after` is `null` for deletes (handler returns 204 with no body)
+- Passwords are stripped recursively from both snapshots
+
+## Assumptions
+
+1. **One user account per employer.** The system links a single login to each employer record. Adding multiple users per employer (e.g. HR + Finance roles) would require an `employer_users` join table and is not in scope.
+
+2. **Gross salary can be overridden per declaration period.** When building declaration lines, callers can pass a `grossSalary` that overrides the employee's base salary for that period. This handles bonus months and mid-period salary changes without updating the employee record.
+
+3. **Payment number is for reference only.** It is auto-generated, guaranteed unique, and intended to match bank transfers to declarations. It is not validated against any external payment gateway.
+
+4. **Period validation is format-only.** The system validates `YYYY-MM` but does not block future or very old periods. A production constraint like "no declarations more than 3 months in arrears" would be a one-line addition to the service.
+
+5. **TIN is always 9 digits.** Based on Rwanda Revenue Authority format. Relax the regex in `employer.dto.ts` for multi-country deployment.
+
+6. **Rejection is terminal.** A rejected declaration cannot be re-submitted. The employer creates a new declaration for the same period. This is the simpler model; a `REJECTED -> DRAFT` re-open transition could be added if needed.
+
+7. **Rates represent the employer's contribution only.** The 6% / 7.5% / 0.3% figures are the employer-side share. Employee-side deductions are out of scope.
+
+8. **Soft-deleted national IDs stay reserved.** Re-registering an employee after soft-deletion is not supported via a new record. The existing row must be reactivated manually (status reset to `active`). This prevents accidental duplicate identities for the same person.
+
+9. **Audit logs are append-only.** There is no delete or update endpoint for `audit_logs`. Cleanup, if ever needed, is a direct DB operation with appropriate access controls outside the API.
+
+## What Could Be Added Next
+
+### Security
+- **Refresh tokens.** Current JWTs are single-token with no rotation. A `refresh_tokens` table with short-lived access tokens and longer-lived refresh tokens would harden session management.
+- **Idempotency keys.** Declaration submission should accept an `Idempotency-Key` header to safely retry on network failure without creating duplicates.
 
 ### Performance
-- **Redis caching**: The contribution summary endpoint is a good candidate for short-lived cache (e.g., 5-minute TTL) since validated declarations don't change.
-- **Background jobs**: Large declaration processing (>1000 employees) should be queued via Bull/BullMQ rather than blocking the HTTP request.
+- **Redis caching** on the contribution summary endpoint. Validated declarations do not change, so the monthly aggregation is a good candidate for a short TTL cache.
+- **Background job queue** (Bull/BullMQ) for large declarations with hundreds of employees, rather than blocking the HTTP request for the full computation.
 
 ### Features
-- **Bulk employee import**: CSV upload to register many employees at once (common need for employers onboarding).
-- **Notification emails**: Send email when a declaration is validated or rejected.
-- **Payment integration**: Generate a payment reference and expose a webhook endpoint for payment gateways to confirm remittance.
-- **Multi-period amendment**: Allow correcting a validated declaration by creating an amendment with a reference to the original.
-- **Export endpoints**: Download declarations as PDF or CSV for record-keeping.
+- **Bulk employee import.** CSV upload to onboard many employees at once, which is the typical case for a new employer joining the system.
+- **Email notifications.** Alert the employer when their declaration is validated or rejected.
+- **Payment gateway webhook.** Expose a webhook endpoint to receive payment confirmation and mark a validated declaration as paid.
+- **Declaration amendments.** Allow correcting a validated declaration by creating an amendment that references the original, preserving the full audit trail.
+- **Export endpoints.** Download a declaration as a PDF or CSV for physical record-keeping.
 
 ### Developer Experience
-- **OpenAPI client generation**: Use `@nestjs/swagger`'s CLI plugin for zero-boilerplate Swagger decorators, then auto-generate a TypeScript client SDK.
-- **More unit tests**: Current test suite is e2e. Unit tests for `DeclarationsService.buildContributionLines` and calculation logic would be faster and more targeted.
-- **Docker multi-stage with distroless**: Reduce final image size significantly by using `gcr.io/distroless/nodejs` instead of `node:22-alpine`.
+- **Unit tests for calculation logic.** The e2e suite covers the happy path end-to-end, but isolated unit tests for `ContributionLine.calculate()`, the enrollment resolution logic, and the `deriveAction()` audit helper would be faster to run and easier to pin regressions to.
+- **OpenAPI client generation.** The Swagger spec is already complete. Auto-generating a TypeScript client SDK from it would make integration straightforward for frontend consumers.
