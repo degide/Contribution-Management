@@ -72,6 +72,7 @@ export class Declaration {
     precision: 15,
     scale: 2,
     default: 0,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
   })
   totalPension: number;
 
@@ -81,6 +82,7 @@ export class Declaration {
     precision: 15,
     scale: 2,
     default: 0,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
   })
   totalMedical: number;
 
@@ -90,6 +92,7 @@ export class Declaration {
     precision: 15,
     scale: 2,
     default: 0,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
   })
   totalMaternity: number;
 
@@ -99,6 +102,7 @@ export class Declaration {
     precision: 15,
     scale: 2,
     default: 0,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
   })
   grandTotal: number;
 

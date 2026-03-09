@@ -41,7 +41,13 @@ export class Employee {
   hireDate: Date;
 
   // Base gross salary which can be overridden per declaration period
-  @Column({ name: 'gross_salary', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'gross_salary',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   grossSalary: number;
 
   @Column({ nullable: true })

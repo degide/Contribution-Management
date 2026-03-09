@@ -9,6 +9,7 @@ A backend for an Employer Contribution Management System. Built with NestJS, Typ
 ```bash
 git clone https://github.com/degide/Contribution-Management.git
 cd Contribution-Management
+docker compose down # (additionally  remove volumes if not first time setup)
 docker compose up --build
 ```
 

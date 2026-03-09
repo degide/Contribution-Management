@@ -44,19 +44,49 @@ export class ContributionLine {
   employee: Employee;
 
   // Gross salary for this specific period (may differ from base salary)
-  @Column({ name: 'gross_salary', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'gross_salary',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   grossSalary: number;
 
-  @Column({ name: 'pension_amount', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'pension_amount',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   pensionAmount: number;
 
-  @Column({ name: 'medical_amount', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'medical_amount',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   medicalAmount: number;
 
-  @Column({ name: 'maternity_amount', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'maternity_amount',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   maternityAmount: number;
 
-  @Column({ name: 'total', type: 'decimal', precision: 15, scale: 2 })
+  @Column({
+    name: 'total',
+    type: 'decimal',
+    precision: 15,
+    scale: 2,
+    transformer: { to: (v) => v, from: (v) => parseFloat(v) },
+  })
   total: number;
 
   @Column({ name: 'include_medical', default: true })

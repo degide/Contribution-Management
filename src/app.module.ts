@@ -11,6 +11,7 @@ import { AuditModule } from './audit/audit.module';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 import { AuditService } from './audit/audit.service';
 import { DataSource } from 'typeorm';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { DataSource } from 'typeorm';
     DeclarationsModule,
     AuditModule,
   ],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,

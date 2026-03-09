@@ -2,6 +2,7 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe, ClassSerializerInterceptor, Logger, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as dotenv from 'dotenv';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -48,6 +49,9 @@ async function bootstrap() {
     allowedHeaders: 'Content-Type, Accept, Authorization',
   });
 
+  // Security headers
+  app.use(helmet());
+
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('Employer Contribution Management API')
@@ -75,6 +79,7 @@ async function bootstrap() {
     )
     .setVersion('1.0.0')
     .addBearerAuth()
+    .addTag('Common', 'Common utility endpoints')
     .addTag('Auth', 'Authentication endpoints')
     .addTag('Employers', 'Employer management')
     .addTag('Employees', 'Employee registration')
